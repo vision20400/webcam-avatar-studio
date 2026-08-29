@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# MediaPipe wasm runtime — restored by scripts/copy-wasm.mjs on postinstall.
+# Must match the installed @mediapipe/tasks-vision version, so it is never committed.
+/public/mediapipe/wasm/

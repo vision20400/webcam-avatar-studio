@@ -1,36 +1,117 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 아바타 캠 스튜디오
 
-## Getting Started
+웹캠으로 사람의 스켈레톤을 인식해 3D 아바타를 실시간으로 씌우는 웹 서비스입니다.
+전신 모드(몸 + 얼굴 + 손가락)와 얼굴 전용 모드를 지원하고, 줌 아바타나 VTuber
+툴처럼 표정·시선·고개까지 따라갑니다.
 
-First, run the development server:
+**영상은 전부 브라우저 안에서만 처리됩니다.** 카메라 프레임도, 랜드마크도 서버로
+올라가지 않습니다. 추론 모델과 WASM 런타임도 `public/` 에서 자체 호스팅합니다.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+카메라는 `localhost` 또는 HTTPS 에서만 열립니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 무엇이 되나
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 기능 | 설명 |
+| --- | --- |
+| 전신 트래킹 | 골반·척추·팔다리·발까지 33개 랜드마크 기반으로 리깅 |
+| 얼굴 트래킹 | 468점 페이스 메시로 고개 방향, 52개 블렌드셰이프로 표정·시선 |
+| 손가락 트래킹 | 양손 21점 × 2 → VRM 손가락 본 30개 (선택, 무거움) |
+| 아바타 | 내장 저폴리 캐릭터(색상 변경 가능) 또는 직접 올린 `.vrm` |
+| 배경 | 다크 / 스튜디오 / 크로마키 / 투명 |
+| 출력 | PNG 스냅샷, webm 녹화, OBS·Zoom 용 투명 배경 `/embed` 페이지 |
 
-## Learn More
+VRM 파일은 파일 선택으로 올리거나(브라우저 안에만 존재), URL 로 지정할 수 있습니다.
+VRM 0.x / 1.0 둘 다 동작합니다.
 
-To learn more about Next.js, take a look at the following resources:
+### OBS · Zoom 에 넣기
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`/embed` 는 UI 없이 아바타만 그리는 페이지입니다. 쿼리로 전부 설정합니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+/embed?mode=full&mirror=1&hands=0&preset=upper&bg=transparent
+/embed?mode=face&preset=face&bg=chroma&chroma=%2300b140
+/embed?...&vrm=https://example.com/my-avatar.vrm
+```
 
-## Deploy on Vercel
+OBS 는 브라우저 소스에 이 주소를 넣으면 되고, Zoom 은 브라우저 소스를 가상 카메라로
+내보내거나 화면 공유로 씁니다. (브라우저만으로 가상 카메라 장치를 만들 수는 없습니다.)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 구조
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/lib/tracking/   MediaPipe 래핑, 1€ 필터, 스켈레톤 오버레이
+src/lib/avatar/     본 정의 · 랜드마크→본 솔버 · 내장 캐릭터 · VRM 로더 · 표정 매핑
+src/lib/scene/      three.js 뷰어(조명·배경·카메라 프리셋·녹화)
+src/components/     엔진 훅과 UI
+```
+
+### 좌표계
+
+이 프로젝트에서 가장 헷갈리는 부분이라 명시해 둡니다.
+
+- **MediaPipe world**: `+x` 이미지 오른쪽, `+y` 아래, `+z` 카메라에서 멀어지는 방향
+- **아바타 공간**: `+x` 아바타의 **왼쪽**, `+y` 위, `+z` 카메라 쪽(정면)
+
+변환은 `(x, -y, -z)` 입니다. 회전 행렬식이 `+1` 이라 손잡이(handedness)가 보존되고,
+따로 미러링 보정이 필요 없습니다.
+
+**거울 모드**는 x 를 뒤집고 좌/우 관절 이름을 맞바꿉니다. 이렇게 하면 왼/오른쪽이
+서로 뒤집힌 "거울상 포즈"가 되면서도 각 본의 회전은 여전히 정상적인(반사되지 않은)
+회전이 됩니다.
+
+### 본 솔빙
+
+모든 본을 **월드 공간에서 먼저** 풉니다.
+
+1. 로드 시점의 rest 포즈에서 각 본의 월드 방향(`본 → 자식 본`)과 월드 회전을 기록
+2. 매 프레임 `rest 방향 → 추적된 방향` 회전을 구해 rest 월드 회전에 곱함
+3. 월드 회전을 그대로 보간(slerp)한 뒤, 이미 보간이 끝난 부모의 월드 회전으로
+   나눠 로컬 회전으로 되돌림
+
+몸통·머리는 방향 하나로는 롤(twist)이 결정되지 않아서, 어깨선/골반선/얼굴 좌우축으로
+직교 기저를 만들어 캐릭터 기저(`x=왼쪽, y=위, z=정면`)로 넣습니다. 이 기저에 rest
+회전을 다시 곱하기 때문에, 본이 identity 가 아닌 리그(180° 돌아간 VRM 0.x, A-포즈로
+만든 모델)에서도 같은 결과가 나옵니다.
+
+부드러움은 랜드마크 단계의 **1€ 필터**(빠르게 움직이면 지연 없이, 멈추면 강하게
+평활화)와 본 회전 단계의 프레임레이트 독립 감쇠, 두 군데에서 겁니다.
+
+### 검증
+
+```bash
+npm run check:rig
+```
+
+합성 랜드마크를 실제 솔버에 넣어 좌표계·거울 모드·비표준 rest 포즈를 검사합니다.
+"오른팔을 든 사람 → 아바타의 어느 팔이 어느 방향으로 올라가는가" 같은, 눈으로만
+보면 놓치기 쉬운 것들입니다.
+
+## 에셋
+
+`npm install` 만 하면 다 갖춰집니다. 추가로 받아야 하는 건 없습니다.
+
+- `public/models/*.task` (약 26MB) — **저장소에 포함**. 구글이 배포하는 고정 버전이라
+  커밋해 두면 네트워크 없이도, 나중에 URL 이 바뀌어도 그대로 동작합니다.
+- `public/mediapipe/wasm/` (약 34MB) — **커밋하지 않음**. 설치된
+  `@mediapipe/tasks-vision` 버전과 반드시 짝이 맞아야 해서, `postinstall` 이
+  `node_modules` 에서 복사합니다 (`scripts/copy-wasm.mjs`).
+
+모델 버전을 올리고 싶을 때만:
+
+```bash
+bash scripts/fetch-assets.sh
+```
+
+## 알려진 한계
+
+- 전신 모드는 카메라에 몸 전체(최소 무릎 위)가 들어와야 다리가 안정적입니다.
+- 팔·다리는 최단 회전으로 풀기 때문에 팔뚝의 비틀림(twist)은 재현되지 않습니다.
+  손가락 트래킹을 켜면 손목 롤은 손바닥 법선으로 잡습니다.
+- 깊이(z)는 단안 추정이라 앞뒤 움직임은 실제보다 얕게 나옵니다.
+- 브라우저에서 가상 카메라 장치를 만들 수는 없어, 화상회의에는 OBS 가상 카메라 등을
+  거쳐야 합니다.
