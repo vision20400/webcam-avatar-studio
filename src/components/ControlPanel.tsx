@@ -16,7 +16,7 @@ import {
 } from "@/lib/avatar/format";
 import { DEFAULT_MANNEQUIN } from "@/lib/avatar/mannequin";
 import type { useAvatarEngine } from "./useAvatarEngine";
-import { Button, ColorField, Panel, Segmented, Slider, Toggle } from "./ui";
+import { Button, ColorField, OptionGrid, Panel, Segmented, Slider, Toggle } from "./ui";
 
 type Engine = ReturnType<typeof useAvatarEngine>;
 
@@ -304,14 +304,16 @@ export function ControlPanel({ engine }: { engine: Engine }) {
         </div>
         <div>
           <p className="mb-1 text-[12px] text-white/80">배경</p>
-          <Segmented
+          <OptionGrid
             value={s.background}
             onChange={(v) => s.set("background", v)}
             options={[
+              { value: "busan", label: "부산", hint: "광안대교와 마린시티 야경" },
+              { value: "cyber", label: "사이버네틱", hint: "네온 시티" },
               { value: "gradient", label: "다크" },
               { value: "studio", label: "스튜디오" },
-              { value: "chroma", label: "크로마" },
-              { value: "transparent", label: "투명" },
+              { value: "chroma", label: "크로마", hint: "크로마키 합성용 단색" },
+              { value: "transparent", label: "투명", hint: "OBS 브라우저 소스용" },
             ]}
           />
         </div>
@@ -355,12 +357,12 @@ export function ControlPanel({ engine }: { engine: Engine }) {
               mode: s.mode,
               mirror: s.mirror ? "1" : "0",
               hands: s.hands ? "1" : "0",
-              preset: s.cameraPreset,
+              camera: s.cameraPreset,
               bg: "transparent",
             });
             // Blob URLs from a local file pick can't cross window boundaries.
             if (s.presetId) {
-              q.set("preset", s.presetId);
+              q.set("avatar", s.presetId);
             } else if (s.avatarKind === "model" && s.modelUrl?.startsWith("http")) {
               // Blob URLs from the file picker cannot cross window boundaries.
               q.set("model", s.modelUrl);

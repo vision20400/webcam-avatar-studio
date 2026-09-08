@@ -11,8 +11,29 @@ import {
 } from "@/lib/avatar/expressions";
 import { damp } from "@/lib/tracking/smoothing";
 import type { TrackFrame } from "@/lib/types";
+import {
+  createBackdrop,
+  type Backdrop,
+  type SceneBackdropId,
+} from "./backdrops";
 
-export type BackgroundKind = "gradient" | "studio" | "chroma" | "transparent";
+export type BackgroundKind =
+  | "gradient"
+  | "studio"
+  | "chroma"
+  | "transparent"
+  | SceneBackdropId;
+
+const SCENE_BACKDROPS: SceneBackdropId[] = ["busan", "cyber"];
+
+/** Plain-colour defaults, restored whenever a scenic backdrop is removed. */
+const DEFAULT_ENV = {
+  hemi: { sky: 0xdfe8ff, ground: 0x2b2f45, intensity: 1.5 },
+  key: { color: 0xffffff, intensity: 2.1, position: [1.6, 3.1, 2.6] as const },
+  rim: { color: 0x8ea4ff, intensity: 1.1, position: [-2.2, 1.8, -2.4] as const },
+  exposure: 1.05,
+  shadowOpacity: 0.28,
+};
 export type CameraPreset = "full" | "upper" | "face";
 
 const PRESETS: Record<CameraPreset, { pos: [number, number, number]; target: number }> =
@@ -52,10 +73,15 @@ export class AvatarViewer {
   private smoothedFace = structuredClone(NEUTRAL_FACE);
   private rawFace = new Map<string, number>();
   private ground: THREE.Mesh;
-  private backdrop: THREE.Texture | null = null;
+  private flat: THREE.Texture | null = null;
   private background: BackgroundKind = "gradient";
   private chroma = "#00b140";
   private preset: CameraPreset = "full";
+  private hemi: THREE.HemisphereLight;
+  private key: THREE.DirectionalLight;
+  private rim: THREE.DirectionalLight;
+  private backdrop: Backdrop | null = null;
+  private elapsed = 0;
 
   expressionGain = 1.15;
   idleBlink = true;
@@ -73,7 +99,9 @@ export class AvatarViewer {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
-    this.camera = new THREE.PerspectiveCamera(32, 1, 0.05, 60);
+    // The scenic backdrops put geometry 80-200 units out, so the far plane has
+    // to clear them; the avatar never gets closer than the orbit min distance.
+    this.camera = new THREE.PerspectiveCamera(32, 1, 0.2, 10000);
     this.camera.position.set(0, 1.05, 3.15);
 
     this.controls = new OrbitControls(this.camera, canvas);
@@ -83,25 +111,25 @@ export class AvatarViewer {
     this.controls.maxDistance = 8;
     this.controls.target.set(0, 0.95, 0);
 
-    const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x2b2f45, 1.5);
-    this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight(0xdfe8ff, 0x2b2f45, 1.5);
+    this.scene.add(this.hemi);
 
-    const key = new THREE.DirectionalLight(0xffffff, 2.1);
-    key.position.set(1.6, 3.1, 2.6);
-    key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    key.shadow.camera.top = 2.4;
-    key.shadow.camera.bottom = -0.4;
-    key.shadow.camera.left = -1.6;
-    key.shadow.camera.right = 1.6;
-    key.shadow.camera.near = 0.5;
-    key.shadow.camera.far = 9;
-    key.shadow.bias = -0.0015;
-    this.scene.add(key);
+    this.key = new THREE.DirectionalLight(0xffffff, 2.1);
+    this.key.position.set(1.6, 3.1, 2.6);
+    this.key.castShadow = true;
+    this.key.shadow.mapSize.set(1024, 1024);
+    this.key.shadow.camera.top = 2.4;
+    this.key.shadow.camera.bottom = -0.4;
+    this.key.shadow.camera.left = -1.6;
+    this.key.shadow.camera.right = 1.6;
+    this.key.shadow.camera.near = 0.5;
+    this.key.shadow.camera.far = 9;
+    this.key.shadow.bias = -0.0015;
+    this.scene.add(this.key);
 
-    const rim = new THREE.DirectionalLight(0x8ea4ff, 1.1);
-    rim.position.set(-2.2, 1.8, -2.4);
-    this.scene.add(rim);
+    this.rim = new THREE.DirectionalLight(0x8ea4ff, 1.1);
+    this.rim.position.set(-2.2, 1.8, -2.4);
+    this.scene.add(this.rim);
 
     this.ground = new THREE.Mesh(
       new THREE.CircleGeometry(4, 48).rotateX(-Math.PI / 2),
@@ -142,8 +170,33 @@ export class AvatarViewer {
   setBackground(kind: BackgroundKind, chroma?: string) {
     this.background = kind;
     if (chroma) this.chroma = chroma;
-    this.backdrop?.dispose();
-    this.backdrop = null;
+
+    if (this.backdrop) {
+      this.scene.remove(this.backdrop.root);
+      this.backdrop.dispose();
+      this.backdrop = null;
+    }
+    this.flat?.dispose();
+    this.flat = null;
+    this.scene.fog = null;
+    this.scene.environment = null;
+
+    if (SCENE_BACKDROPS.includes(kind as SceneBackdropId)) {
+      const backdrop = createBackdrop(kind as SceneBackdropId);
+      this.backdrop = backdrop;
+      this.scene.add(backdrop.root);
+      this.scene.background = backdrop.env.background;
+      this.scene.environment = backdrop.env.background;
+      this.scene.environmentIntensity = backdrop.env.environmentIntensity;
+      const f = backdrop.env.fog;
+      if (f) this.scene.fog = new THREE.Fog(f.color, f.near, f.far);
+      this.applyEnvironment(backdrop.env);
+      this.ground.visible = true;
+      return;
+    }
+
+    this.applyEnvironment(DEFAULT_ENV);
+    this.scene.environmentIntensity = 1;
 
     if (kind === "transparent") {
       this.scene.background = null;
@@ -156,18 +209,42 @@ export class AvatarViewer {
       this.scene.background = new THREE.Color(this.chroma);
       return;
     }
-    this.backdrop =
+    this.flat =
       kind === "studio"
         ? gradientTexture("#f4f6ff", "#c3c9e4")
         : gradientTexture("#2b2f57", "#0b0d1c");
-    this.scene.background = this.backdrop;
+    this.scene.background = this.flat;
+  }
+
+  private applyEnvironment(env: {
+    hemi: { sky: number; ground: number; intensity: number };
+    key: { color: number; intensity: number; position: readonly [number, number, number] };
+    rim: { color: number; intensity: number; position: readonly [number, number, number] };
+    exposure: number;
+    shadowOpacity: number;
+  }) {
+    this.hemi.color.setHex(env.hemi.sky);
+    this.hemi.groundColor.setHex(env.hemi.ground);
+    this.hemi.intensity = env.hemi.intensity;
+
+    this.key.color.setHex(env.key.color);
+    this.key.intensity = env.key.intensity;
+    this.key.position.set(...env.key.position);
+
+    this.rim.color.setHex(env.rim.color);
+    this.rim.intensity = env.rim.intensity;
+    this.rim.position.set(...env.rim.position);
+
+    this.renderer.toneMappingExposure = env.exposure;
+    (this.ground.material as THREE.ShadowMaterial).opacity = env.shadowOpacity;
   }
 
   applyPreset(preset: CameraPreset, immediate = false) {
-    this.preset = preset;
+    // Query strings reach this directly, so an unknown value must not crash.
+    const p = PRESETS[preset] ?? PRESETS.full;
+    this.preset = PRESETS[preset] ? preset : "full";
     const rig = this.rig;
     const h = rig ? rig.metrics.height : 1.7;
-    const p = PRESETS[preset];
     const target = new THREE.Vector3(0, h * p.target + (preset === "face" ? 0.02 : 0), 0);
     const pos = new THREE.Vector3(p.pos[0], h * (p.pos[1] / 1.7) + target.y * 0.35, p.pos[2] * (h / 1.7));
     if (immediate) {
@@ -205,6 +282,8 @@ export class AvatarViewer {
 
   private render() {
     const dt = Math.min(this.clock.getDelta(), 0.1);
+    this.elapsed += dt;
+    this.backdrop?.update(this.elapsed);
 
     if (this.pendingCamera) {
       const a = damp(0.35, dt);
@@ -319,6 +398,7 @@ export class AvatarViewer {
     this.setRig(null);
     this.controls.dispose();
     this.backdrop?.dispose();
+    this.flat?.dispose();
     this.ground.geometry.dispose();
     (this.ground.material as THREE.Material).dispose();
     this.renderer.dispose();

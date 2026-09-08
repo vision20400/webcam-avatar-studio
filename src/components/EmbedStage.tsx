@@ -23,13 +23,21 @@ export function EmbedStage() {
   useEffect(() => {
     const bg = (params.get("bg") as BackgroundKind) ?? "transparent";
     // `vrm` is the older spelling of `model`; both still work.
-    const preset = findPreset(params.get("preset"));
+    const preset = findPreset(params.get("avatar"));
     const modelUrl = preset?.url ?? params.get("model") ?? params.get("vrm");
+    // `preset` used to mean the camera angle, and still does — the bundled
+    // avatars are addressed with `avatar` so the two cannot collide.
+    const requested = params.get("camera") ?? params.get("preset");
+    const camera: CameraPreset = (["full", "upper", "face"] as const).includes(
+      requested as CameraPreset,
+    )
+      ? (requested as CameraPreset)
+      : "full";
     useSettings.getState().patch({
       mode: (params.get("mode") as TrackMode) ?? "full",
       mirror: params.get("mirror") !== "0",
       hands: params.get("hands") === "1",
-      cameraPreset: (params.get("preset") as CameraPreset) ?? "full",
+      cameraPreset: camera,
       background: bg,
       chroma: params.get("chroma") ?? "#00b140",
       showCamera: false,

@@ -22,7 +22,7 @@ npm run dev      # http://localhost:3000
 | 얼굴 트래킹 | 468점 페이스 메시로 고개 방향, 52개 블렌드셰이프로 표정·시선 |
 | 손가락 트래킹 | 양손 21점 × 2 → VRM 손가락 본 30개 (선택, 무거움) |
 | 아바타 | 내장 VRM 8종(남·여 × 4가지 분위기), 저폴리 도형 캐릭터, 또는 직접 올린 `.vrm` · `.glb` · `.gltf` · `.fbx` |
-| 배경 | 다크 / 스튜디오 / 크로마키 / 투명 |
+| 배경 | 부산 야경 · 사이버네틱 3D 장면, 그리고 다크 / 스튜디오 / 크로마키 / 투명 |
 | 출력 | PNG 스냅샷, webm 녹화, OBS·Zoom 용 투명 배경 `/embed` 페이지 |
 
 ### 내장 아바타
@@ -85,17 +85,38 @@ VRM 식 이름                 leftLowerArm, leftThumbProximal
 `/embed` 는 UI 없이 아바타만 그리는 페이지입니다. 쿼리로 전부 설정합니다.
 
 ```
-/embed?mode=full&mirror=1&hands=0&preset=upper&bg=transparent
-/embed?mode=face&preset=face&bg=chroma&chroma=%2300b140
-/embed?...&preset=06-male-strong
+/embed?mode=full&mirror=1&hands=0&camera=upper&bg=busan
+/embed?mode=face&camera=face&bg=chroma&chroma=%2300b140
+/embed?bg=cyber&avatar=06-male-strong
 /embed?...&model=https://example.com/my-avatar.glb
 ```
 
-`preset` 은 내장 아바타 id, `model` 은 확장자로 형식을 판별하는 모델 주소입니다.
-(예전 이름인 `vrm` 도 계속 동작합니다.)
+| 파라미터 | 값 |
+| --- | --- |
+| `bg` | `busan` `cyber` `gradient` `studio` `chroma` `transparent` |
+| `camera` | `full` `upper` `face` |
+| `avatar` | 내장 아바타 id (`06-male-strong` 등) |
+| `model` | 모델 주소. 확장자로 형식을 판별합니다 (`vrm` 은 예전 이름) |
+
+`camera` 는 예전에 `preset` 이었습니다. 내장 아바타가 생기면서 이름이 겹쳐 분리했고,
+`preset` 에 카메라 값이 들어오면 지금도 받습니다.
 
 OBS 는 브라우저 소스에 이 주소를 넣으면 되고, Zoom 은 브라우저 소스를 가상 카메라로
 내보내거나 화면 공유로 씁니다. (브라우저만으로 가상 카메라 장치를 만들 수는 없습니다.)
+
+### 배경
+
+`부산`(광안대교와 마린시티 야경)과 `사이버네틱`(네온 시티)은 이미지가 아니라 실행
+시점에 만들어지는 3D 장면입니다. 사진을 쓰면 라이선스가 따라붙고 저장소도 무거워지는데,
+절차적으로 만들면 용량이 0 이고 카메라를 돌려도 시차가 살아 있습니다. 하늘·창문·네온
+글로우·바닥 그리드 텍스처는 전부 캔버스로 그립니다(`src/lib/scene/textures.ts`).
+
+장면은 배경만 바꾸는 게 아니라 **조명까지 함께 바꿉니다**. 네온 스카이라인 앞에 선
+아바타를 중립광으로 비추면 합성한 티가 나기 때문에, 키·림 라이트 색과 세기, 톤매핑
+노출, 그림자 농도를 장면마다 지정합니다(`BackdropEnvironment`).
+
+크기는 1유닛 = 1m 로 맞췄습니다. 아바타가 1.7m 인데 건물을 100유닛 거리에 두면 원근이
+무너지기 때문에, 건물은 90~320m 높이로 1.8~3.6km 밖에, 광안대교는 1.3km 앞에 둡니다.
 
 ## 구조
 
@@ -143,6 +164,14 @@ src/components/     엔진 훅과 UI
 ```bash
 npm run check:rig       # 좌표계 · 본 매핑 · 리그 정규화
 npm run check:avatars   # 내장 VRM 8종의 본 · 표정 · 썸네일
+npm run shoot           # 헤드리스 크롬 스크린샷 -> .shots/
+```
+
+`shoot` 는 설치된 크롬을 그대로 쓰고 가짜 카메라 장치를 물려, 웹캠 앞에 사람이 앉지
+않아도 배경·아바타·프레이밍을 눈으로 확인할 수 있게 합니다.
+
+```bash
+npm run shoot busan cyber studio-ui
 ```
 
 합성 랜드마크를 실제 솔버에 넣어 좌표계·거울 모드·비표준 rest 포즈를 검사하고,
@@ -182,3 +211,5 @@ bash scripts/fetch-assets.sh
   Blender 등에서 이름을 바꾸거나 VRM 으로 내보내는 편이 빠릅니다.
 - 내장 아바타는 한 개당 14~16MB 라 처음 고를 때 로딩이 걸립니다. 진행률을 표시하고,
   한 번 받으면 브라우저가 캐시합니다.
+- 3D 배경은 카메라 far 클리핑을 10km 로 늘려 씁니다. 아바타에 z-파이팅이 보이면
+  `viewer.ts` 의 near/far 를 함께 조정해야 합니다.

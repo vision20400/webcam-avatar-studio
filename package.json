@@ -9,7 +9,8 @@
     "lint": "eslint",
     "check:rig": "tsx scripts/rig-check.mts",
     "postinstall": "node scripts/copy-wasm.mjs",
-    "check:avatars": "node scripts/check-presets.mjs"
+    "check:avatars": "node scripts/check-presets.mjs",
+    "shoot": "node scripts/shoot.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
@@ -28,6 +29,7 @@
     "@types/three": "^0.185.4",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
+    "puppeteer-core": "^25.10.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5"

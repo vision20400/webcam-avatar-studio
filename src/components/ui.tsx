@@ -54,6 +54,42 @@ export function Segmented<T extends string>({
   );
 }
 
+/** Like Segmented but wraps onto multiple rows — for more than four choices. */
+export function OptionGrid<T extends string>({
+  value,
+  onChange,
+  options,
+  columns = 3,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string; hint?: string }[];
+  columns?: number;
+}) {
+  return (
+    <div
+      className="grid gap-1"
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+    >
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          title={o.hint ?? o.label}
+          onClick={() => onChange(o.value)}
+          className={`rounded-lg px-2 py-1.5 text-[12px] font-medium transition ${
+            value === o.value
+              ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30"
+              : "bg-black/30 text-white/55 hover:bg-white/10 hover:text-white/80"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Toggle({
   label,
   hint,
