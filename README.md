@@ -36,23 +36,29 @@ VRoid 로 만든 VRM 1.0 아바타 8종이 `public/avatars/` 에 들어 있어, 
 | 여성 | `01-female-cute` | `02-female-athletic` | `03-female-calm` | `04-female-fantasy` |
 | 남성 | `05-male-cute` | `06-male-strong` | `07-male-calm` | `08-male-fantasy` |
 
-#### 저장소에 없는 로컬 전용 아바타
+샘플 4종이 더 있습니다.
 
-카탈로그에는 pixiv VRoid Project 의 공식 샘플 4종(`sample-a` `sample-y` `sample-t`
-`sample-z`)도 등록돼 있지만, **파일은 커밋하지 않습니다.** VRM 메타데이터가
-`allowRedistribution: false`, `modification: prohibited`,
-`avatarPermission: onlyAuthor` 로 재배포를 금지하기 때문입니다
-(<https://vrm.dev/licenses/1.0/>).
+| | 내추럴 | 스쿨 |
+| --- | --- | --- |
+| 여성 | `sample-a` | `sample-y` |
 
-`bundled: false` 로 표시돼 있고 UI 에서는 이름 옆에 `*` 가 붙습니다. 쓰려면 각자
-받아서 아래 이름으로 넣고 썸네일을 추출하면 됩니다.
+| | 밀리터리 | 스쿨 |
+| --- | --- | --- |
+| 남성 | `sample-t` | `sample-z` |
 
-```bash
-cp AvatarSample_T.vrm public/avatars/sample-t.vrm   # A / Y / Z 도 같은 방식
-node scripts/extract-vrm-thumbnails.mjs
-```
+#### 라이선스
 
-`creditNotation: required` 라 선택했을 때 제작자 표기가 UI 에 함께 뜹니다.
+12종 모두 `creditNotation: required` 라, 고르면 제작자 표기와 라이선스 링크가 UI 에
+함께 뜹니다(<https://vrm.dev/licenses/1.0/>).
+
+VRM 의 `allowRedistribution` 은 **제3자**에게 거는 제한이라 제작자 본인이 자기
+모델을 배포하는 것과는 무관합니다. 그래서 `check:avatars` 는 이 플래그를
+`PROJECT_AUTHOR`(`src/lib/avatar/presets.ts`) 가 아닌 사람이 만든 모델에 대해서만
+차단 조건으로 봅니다. 남의 모델을 넣으려다 재배포 금지 파일을 커밋하는 사고를
+막으면서, 자기 작업물은 그냥 배포할 수 있게 하는 선입니다.
+
+카탈로그의 `author` 가 파일 메타데이터와 다르면 검사가 실패합니다. 모델을 다시
+내보내면 메타데이터가 조용히 바뀌는데, 하필 그때가 제일 중요한 순간이라서입니다.
 
 선택 UI 의 썸네일은 각 VRM 이 메타데이터에 갖고 있는 이미지를 뽑아 쓴 것입니다.
 아바타를 교체하거나 추가한 뒤에는:

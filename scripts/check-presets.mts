@@ -12,7 +12,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { AVATAR_PRESETS } from "../src/lib/avatar/presets";
+import { AVATAR_PRESETS, PROJECT_AUTHOR } from "../src/lib/avatar/presets";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -29,6 +29,11 @@ interface GltfJson {
     VRMC_vrm?: {
       humanoid?: { humanBones?: Record<string, unknown> };
       expressions?: { preset?: Record<string, unknown> };
+      meta?: {
+        authors?: string[];
+        allowRedistribution?: boolean;
+        creditNotation?: string;
+      };
     };
   };
 }
@@ -82,6 +87,31 @@ for (const preset of AVATAR_PRESETS) {
   const missingExpected = EXPECTED.filter((b) => !bones[b]);
   const fingers = FINGERS.filter((b) => bones[b]).length;
   const expressions = Object.keys(vrmExt?.expressions?.preset ?? {});
+  const meta = vrmExt?.meta;
+
+  const authors = meta?.authors ?? [];
+
+  // allowRedistribution restrains third parties, not the author, so it only
+  // blocks a commit when the file was made by somebody else. Metadata drifts
+  // silently on re-export, which is exactly when this matters.
+  const thirdParty = authors.length > 0 && !authors.includes(PROJECT_AUTHOR);
+  if (preset.bundled && thirdParty && meta?.allowRedistribution === false) {
+    check(
+      `${preset.id} 라이선스`,
+      false,
+      `"${authors.join(", ")}" 의 모델인데 allowRedistribution: false — 저장소에 포함할 수 없습니다`,
+    );
+  }
+  if (preset.author && authors.length > 0 && !authors.includes(preset.author)) {
+    check(
+      `${preset.id} 제작자 표기`,
+      false,
+      `카탈로그 "${preset.author}" vs 파일 "${authors.join(", ")}"`,
+    );
+  }
+  if (!preset.author && meta?.creditNotation === "required") {
+    check(`${preset.id} 크레딧`, false, "creditNotation: required 인데 author 가 없습니다");
+  }
 
   check(
     `${preset.id}${preset.bundled ? "" : " (로컬 전용)"}`,
@@ -93,6 +123,7 @@ for (const preset of AVATAR_PRESETS) {
       `손가락 ${fingers}/${FINGERS.length}`,
       `표정 ${expressions.length}개`,
       existsSync(thumb) ? `썸네일 ${(statSync(thumb).size / 1024).toFixed(0)}KB` : "썸네일 없음",
+      `재배포 ${meta?.allowRedistribution ? "허용" : "금지"}`,
     ].join(" · "),
   );
 }
