@@ -44,3 +44,8 @@ next-env.d.ts
 # Must match the installed @mediapipe/tasks-vision version, so it is never committed.
 /public/mediapipe/wasm/
 .shots/
+
+# Avatars whose licence forbids redistribution (pixiv VRoid samples).
+# They work locally; see src/lib/avatar/presets.ts (bundled: false).
+/public/avatars/sample-*.vrm
+/public/avatars/thumbs/sample-*.jpg

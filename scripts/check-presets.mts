@@ -1,13 +1,18 @@
 /**
- * Validates the bundled avatars without launching a browser: every preset in
- * the catalog must exist, be a VRM 1.0 file, carry the humanoid bones the
- * solver drives, and have a thumbnail on disk.
+ * Validates the avatar catalog without launching a browser: every bundled
+ * preset must exist, be a VRM 1.0 file, carry the humanoid bones the solver
+ * drives, and have a thumbnail on disk.
+ *
+ * Models marked `bundled: false` are licensed against redistribution, so they
+ * are reported but never required — a fresh clone will not have them.
  *
  *   npm run check:avatars
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { AVATAR_PRESETS } from "../src/lib/avatar/presets";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -19,7 +24,16 @@ const EXPECTED = [
 ];
 const FINGERS = ["leftThumbProximal", "leftIndexProximal", "rightIndexProximal"];
 
-function parseGlbJson(buf) {
+interface GltfJson {
+  extensions?: {
+    VRMC_vrm?: {
+      humanoid?: { humanBones?: Record<string, unknown> };
+      expressions?: { preset?: Record<string, unknown> };
+    };
+  };
+}
+
+function parseGlbJson(buf: Buffer): GltfJson {
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   if (dv.getUint32(0, true) !== 0x46546c67) throw new Error("glb 헤더가 아닙니다");
   let offset = 12;
@@ -27,35 +41,39 @@ function parseGlbJson(buf) {
     const len = dv.getUint32(offset, true);
     const type = dv.getUint32(offset + 4, true);
     const start = offset + 8;
-    if (type === 0x4e4f534a) return JSON.parse(buf.subarray(start, start + len).toString("utf8"));
+    if (type === 0x4e4f534a) {
+      return JSON.parse(buf.subarray(start, start + len).toString("utf8")) as GltfJson;
+    }
     offset = start + len;
   }
   throw new Error("JSON 청크를 찾지 못했습니다");
 }
 
-// The catalog is TypeScript; read the ids straight out of it so the two files
-// cannot drift apart.
-const catalog = readFileSync(join(root, "src/lib/avatar/presets.ts"), "utf8");
-const ids = [...catalog.matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]);
-
 let failures = 0;
-const check = (label, ok, detail) => {
+const check = (label: string, ok: boolean, detail: string) => {
   if (!ok) failures++;
   console.log(`${ok ? "  ok  " : " FAIL "} ${label} — ${detail}`);
 };
 
-check("카탈로그에 프리셋 8개", ids.length === 8, `${ids.length}개`);
+let bundledBytes = 0;
+let localOnly = 0;
 
-let total = 0;
-for (const id of ids) {
-  const vrm = join(root, "public/avatars", `${id}.vrm`);
-  const thumb = join(root, "public/avatars/thumbs", `${id}.jpg`);
+for (const preset of AVATAR_PRESETS) {
+  const vrm = join(root, "public/avatars", `${preset.id}.vrm`);
+  const thumb = join(root, "public/avatars/thumbs", `${preset.id}.jpg`);
+  const present = existsSync(vrm);
 
-  if (!existsSync(vrm)) {
-    check(id, false, "vrm 파일이 없습니다");
+  if (!present) {
+    if (preset.bundled) {
+      check(preset.id, false, "vrm 파일이 없습니다");
+    } else {
+      localOnly++;
+      console.log(`  --   ${preset.id} — 로컬 전용 (재배포 금지), 이 기기에는 없음`);
+    }
     continue;
   }
-  total += statSync(vrm).size;
+  if (preset.bundled) bundledBytes += statSync(vrm).size;
+  else localOnly++;
 
   const json = parseGlbJson(readFileSync(vrm));
   const vrmExt = json.extensions?.VRMC_vrm;
@@ -66,7 +84,7 @@ for (const id of ids) {
   const expressions = Object.keys(vrmExt?.expressions?.preset ?? {});
 
   check(
-    `${id}`,
+    `${preset.id}${preset.bundled ? "" : " (로컬 전용)"}`,
     vrmExt !== undefined && missing.length === 0 && existsSync(thumb),
     [
       vrmExt ? "VRM 1.0" : "VRM 확장 없음",
@@ -81,7 +99,7 @@ for (const id of ids) {
 
 console.log(
   failures === 0
-    ? `\n전부 통과했습니다. 내장 아바타 합계 ${(total / 1048576).toFixed(0)}MB\n`
+    ? `\n전부 통과했습니다. 저장소 포함 ${(bundledBytes / 1048576).toFixed(0)}MB · 로컬 전용 ${localOnly}개\n`
     : `\n${failures}개 실패했습니다.\n`,
 );
 process.exit(failures === 0 ? 0 : 1);

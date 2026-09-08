@@ -7,6 +7,7 @@ import {
   AVATAR_PRESETS,
   DEFAULT_PRESET,
   GENDER_LABEL,
+  findPreset,
   type Gender,
 } from "@/lib/avatar/presets";
 import {
@@ -33,6 +34,7 @@ export function ControlPanel({ engine }: { engine: Engine }) {
   const objectUrl = useRef<string | null>(null);
   const [modelInput, setModelInput] = useState("");
 
+  const selectedPreset = findPreset(s.presetId);
   const source: "preset" | "custom" | "mannequin" =
     s.avatarKind === "mannequin" ? "mannequin" : s.presetId ? "preset" : "custom";
 
@@ -198,12 +200,39 @@ export function ControlPanel({ engine }: { engine: Engine }) {
                       />
                       <span className="block truncate bg-black/40 px-1 py-0.5 text-[10px] text-white/70">
                         {p.label}
+                        {p.bundled ? "" : " *"}
                       </span>
                     </button>
                   ))}
                 </div>
               </div>
             ))}
+            {selectedPreset?.author ? (
+              // creditNotation: required — the licence asks for attribution
+              // wherever the model is shown.
+              <p className="rounded-lg bg-black/25 px-3 py-2 text-[11px] leading-relaxed text-white/45">
+                {selectedPreset.label} · © {selectedPreset.author}
+                {selectedPreset.licenseUrl ? (
+                  <>
+                    {" "}
+                    <a
+                      href={selectedPreset.licenseUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-white/70"
+                    >
+                      라이선스
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+            {AVATAR_PRESETS.some((p) => !p.bundled) ? (
+              <p className="text-[10px] leading-relaxed text-white/30">
+                * 표시는 재배포가 금지된 모델이라 저장소에 포함되지 않습니다.
+                파일이 있는 기기에서만 보입니다.
+              </p>
+            ) : null}
           </div>
         ) : null}
 

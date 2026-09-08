@@ -9,7 +9,7 @@
     "lint": "eslint",
     "check:rig": "tsx scripts/rig-check.mts",
     "postinstall": "node scripts/copy-wasm.mjs",
-    "check:avatars": "node scripts/check-presets.mjs",
+    "check:avatars": "tsx scripts/check-presets.mts",
     "shoot": "node scripts/shoot.mjs"
   },
   "dependencies": {
