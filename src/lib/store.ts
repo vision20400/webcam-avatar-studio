@@ -5,6 +5,7 @@ import { create } from "zustand";
 import type { BackgroundKind, CameraPreset } from "@/lib/scene/viewer";
 import { DEFAULT_MANNEQUIN, type MannequinOptions } from "@/lib/avatar/mannequin";
 import type { ModelFormat } from "@/lib/avatar/format";
+import { DEFAULT_PRESET, GENDER_LABEL, type AvatarPreset } from "@/lib/avatar/presets";
 import type { AvatarKind, PoseQuality, TrackMode } from "@/lib/types";
 
 export interface Settings {
@@ -17,6 +18,8 @@ export interface Settings {
   modelUrl: string | null;
   modelName: string | null;
   modelFormat: ModelFormat | null;
+  /** Set when the current model is one of the bundled presets. */
+  presetId: string | null;
   mannequin: MannequinOptions;
 
   smoothing: number;
@@ -43,10 +46,11 @@ const initial: Settings = {
   hands: false,
   mirror: true,
 
-  avatarKind: "mannequin",
-  modelUrl: null,
-  modelName: null,
-  modelFormat: null,
+  avatarKind: "model",
+  modelUrl: DEFAULT_PRESET.url,
+  modelName: presetLabel(DEFAULT_PRESET),
+  modelFormat: DEFAULT_PRESET.format,
+  presetId: DEFAULT_PRESET.id,
   mannequin: DEFAULT_MANNEQUIN,
 
   smoothing: 0.45,
@@ -67,6 +71,21 @@ export const useSettings = create<Store>((set) => ({
   set: (key, value) => set({ [key]: value } as Partial<Settings>),
   patch: (next) => set(next),
 }));
+
+export function presetLabel(preset: AvatarPreset) {
+  return `${GENDER_LABEL[preset.gender]} · ${preset.label}`;
+}
+
+/** Selects one of the bundled avatars. */
+export function selectPreset(preset: AvatarPreset): Partial<Settings> {
+  return {
+    avatarKind: "model",
+    modelUrl: preset.url,
+    modelName: presetLabel(preset),
+    modelFormat: preset.format,
+    presetId: preset.id,
+  };
+}
 
 /** Camera preset that suits a tracking mode, used when the mode changes. */
 export function presetForMode(mode: TrackMode): CameraPreset {

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "check:rig": "tsx scripts/rig-check.mts",
-    "postinstall": "node scripts/copy-wasm.mjs"
+    "postinstall": "node scripts/copy-wasm.mjs",
+    "check:avatars": "node scripts/check-presets.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",

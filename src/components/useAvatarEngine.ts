@@ -125,10 +125,13 @@ export function useAvatarEngine({
               "지원하지 않는 형식입니다. .vrm, .glb, .gltf, .fbx 만 쓸 수 있습니다.",
             );
           }
+          // Bundled VRMs run to ~15MB, so a bare spinner is not enough.
+          const onProgress = (ratio: number) =>
+            setStatus(`아바타 불러오는 중… ${Math.round(ratio * 100)}%`);
           const rig =
             format === "vrm"
-              ? await loadVRMRig(settings.modelUrl, label)
-              : await loadHumanoidRig(settings.modelUrl, label, format);
+              ? await loadVRMRig(settings.modelUrl, label, onProgress)
+              : await loadHumanoidRig(settings.modelUrl, label, format, onProgress);
           if (cancelled) {
             rig.dispose();
             return;

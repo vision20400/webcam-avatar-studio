@@ -21,9 +21,30 @@ npm run dev      # http://localhost:3000
 | 전신 트래킹 | 골반·척추·팔다리·발까지 33개 랜드마크 기반으로 리깅 |
 | 얼굴 트래킹 | 468점 페이스 메시로 고개 방향, 52개 블렌드셰이프로 표정·시선 |
 | 손가락 트래킹 | 양손 21점 × 2 → VRM 손가락 본 30개 (선택, 무거움) |
-| 아바타 | 내장 저폴리 캐릭터(색상 변경 가능) 또는 직접 올린 `.vrm` · `.glb` · `.gltf` · `.fbx` |
+| 아바타 | 내장 VRM 8종(남·여 × 4가지 분위기), 저폴리 도형 캐릭터, 또는 직접 올린 `.vrm` · `.glb` · `.gltf` · `.fbx` |
 | 배경 | 다크 / 스튜디오 / 크로마키 / 투명 |
 | 출력 | PNG 스냅샷, webm 녹화, OBS·Zoom 용 투명 배경 `/embed` 페이지 |
+
+### 내장 아바타
+
+VRoid 로 만든 VRM 1.0 아바타 8종이 `public/avatars/` 에 들어 있어, 모델을 따로
+구하지 않아도 바로 쓸 수 있습니다. 전신 본 54개(손가락 포함)와 표정 프리셋 14개를
+모두 갖추고 있습니다.
+
+| | 큐트 | 스포티 / 강인 | 차분 | 판타지 |
+| --- | --- | --- | --- | --- |
+| 여성 | `01-female-cute` | `02-female-athletic` | `03-female-calm` | `04-female-fantasy` |
+| 남성 | `05-male-cute` | `06-male-strong` | `07-male-calm` | `08-male-fantasy` |
+
+선택 UI 의 썸네일은 각 VRM 이 메타데이터에 갖고 있는 이미지를 뽑아 쓴 것입니다.
+아바타를 교체하거나 추가한 뒤에는:
+
+```bash
+node scripts/extract-vrm-thumbnails.mjs   # 썸네일 재추출
+npm run check:avatars                     # 본·표정·썸네일 검사
+```
+
+카탈로그는 `src/lib/avatar/presets.ts` 한 곳에서 관리합니다.
 
 ### 아바타 파일 형식
 
@@ -66,10 +87,12 @@ VRM 식 이름                 leftLowerArm, leftThumbProximal
 ```
 /embed?mode=full&mirror=1&hands=0&preset=upper&bg=transparent
 /embed?mode=face&preset=face&bg=chroma&chroma=%2300b140
+/embed?...&preset=06-male-strong
 /embed?...&model=https://example.com/my-avatar.glb
 ```
 
-`model` 은 확장자로 형식을 판별합니다. (예전 이름인 `vrm` 도 계속 동작합니다.)
+`preset` 은 내장 아바타 id, `model` 은 확장자로 형식을 판별하는 모델 주소입니다.
+(예전 이름인 `vrm` 도 계속 동작합니다.)
 
 OBS 는 브라우저 소스에 이 주소를 넣으면 되고, Zoom 은 브라우저 소스를 가상 카메라로
 내보내거나 화면 공유로 씁니다. (브라우저만으로 가상 카메라 장치를 만들 수는 없습니다.)
@@ -118,7 +141,8 @@ src/components/     엔진 훅과 UI
 ### 검증
 
 ```bash
-npm run check:rig
+npm run check:rig       # 좌표계 · 본 매핑 · 리그 정규화
+npm run check:avatars   # 내장 VRM 8종의 본 · 표정 · 썸네일
 ```
 
 합성 랜드마크를 실제 솔버에 넣어 좌표계·거울 모드·비표준 rest 포즈를 검사하고,
@@ -131,6 +155,9 @@ Mixamo·Unreal·VRoid·Blender 이름 규칙이 전부 매핑되는지, cm 단�
 
 `npm install` 만 하면 다 갖춰집니다. 추가로 받아야 하는 건 없습니다.
 
+- `public/avatars/*.vrm` (약 120MB) — **저장소에 포함**. 8종을 모두 담고 있어 저장소가
+  무겁습니다. VRoid 원본 내보내기라 텍스처가 PNG 그대로인데, 압축하면 줄일 여지가
+  있습니다(다만 VRM·MToon 확장을 건드리지 않도록 주의해야 합니다).
 - `public/models/*.task` (약 26MB) — **저장소에 포함**. 구글이 배포하는 고정 버전이라
   커밋해 두면 네트워크 없이도, 나중에 URL 이 바뀌어도 그대로 동작합니다.
 - `public/mediapipe/wasm/` (약 34MB) — **커밋하지 않음**. 설치된
@@ -153,3 +180,5 @@ bash scripts/fetch-assets.sh
   거쳐야 합니다.
 - glTF·FBX 는 본 이름이 위 규칙 중 어느 것과도 다르면 인식하지 못합니다. 그럴 때는
   Blender 등에서 이름을 바꾸거나 VRM 으로 내보내는 편이 빠릅니다.
+- 내장 아바타는 한 개당 14~16MB 라 처음 고를 때 로딩이 걸립니다. 진행률을 표시하고,
+  한 번 받으면 브라우저가 캐시합니다.

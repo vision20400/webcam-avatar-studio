@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { useSettings } from "@/lib/store";
 import { detectModelFormat } from "@/lib/avatar/format";
+import { findPreset } from "@/lib/avatar/presets";
 import type { BackgroundKind, CameraPreset } from "@/lib/scene/viewer";
 import type { TrackMode } from "@/lib/types";
 import { useAvatarEngine } from "./useAvatarEngine";
@@ -21,8 +22,9 @@ export function EmbedStage() {
 
   useEffect(() => {
     const bg = (params.get("bg") as BackgroundKind) ?? "transparent";
-    // `vrm` is the older spelling of the same parameter; both still work.
-    const modelUrl = params.get("model") ?? params.get("vrm");
+    // `vrm` is the older spelling of `model`; both still work.
+    const preset = findPreset(params.get("preset"));
+    const modelUrl = preset?.url ?? params.get("model") ?? params.get("vrm");
     useSettings.getState().patch({
       mode: (params.get("mode") as TrackMode) ?? "full",
       mirror: params.get("mirror") !== "0",
@@ -36,8 +38,9 @@ export function EmbedStage() {
         ? {
             avatarKind: "model" as const,
             modelUrl,
-            modelName: modelUrl.split("/").pop() ?? "내 아바타",
-            modelFormat: detectModelFormat(modelUrl),
+            modelName: preset?.label ?? modelUrl.split("/").pop() ?? "내 아바타",
+            modelFormat: preset?.format ?? detectModelFormat(modelUrl),
+            presetId: preset?.id ?? null,
           }
         : {}),
     });

@@ -2,7 +2,13 @@
 
 import { useRef, useState } from "react";
 
-import { useSettings, presetForMode } from "@/lib/store";
+import { useSettings, presetForMode, selectPreset } from "@/lib/store";
+import {
+  AVATAR_PRESETS,
+  DEFAULT_PRESET,
+  GENDER_LABEL,
+  type Gender,
+} from "@/lib/avatar/presets";
 import {
   FORMAT_LABEL,
   MODEL_ACCEPT,
@@ -27,6 +33,9 @@ export function ControlPanel({ engine }: { engine: Engine }) {
   const objectUrl = useRef<string | null>(null);
   const [modelInput, setModelInput] = useState("");
 
+  const source: "preset" | "custom" | "mannequin" =
+    s.avatarKind === "mannequin" ? "mannequin" : s.presetId ? "preset" : "custom";
+
   const applyModelFile = (file: File) => {
     // Blob URLs carry no extension, so the format is read off the file name
     // here and kept in state for the loader to dispatch on.
@@ -46,6 +55,7 @@ export function ControlPanel({ engine }: { engine: Engine }) {
       modelUrl: url,
       modelName: file.name.replace(/\.[^.]+$/, ""),
       modelFormat: format,
+      presetId: null,
     });
   };
 
@@ -64,6 +74,7 @@ export function ControlPanel({ engine }: { engine: Engine }) {
       modelUrl: url,
       modelName: url.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "내 아바타",
       modelFormat: format,
+      presetId: null,
     });
   };
 
@@ -139,19 +150,62 @@ export function ControlPanel({ engine }: { engine: Engine }) {
         hint="VRM 이 가장 정확합니다. glb·gltf·fbx 는 본 이름으로 자동 인식합니다."
       >
         <Segmented
-          value={s.avatarKind}
-          onChange={(kind) => {
-            if (kind === "model" && !s.modelUrl) {
+          value={source}
+          onChange={(next) => {
+            if (next === "mannequin") {
+              s.set("avatarKind", "mannequin");
+            } else if (next === "preset") {
+              s.patch(selectPreset(DEFAULT_PRESET));
+            } else if (s.presetId || !s.modelUrl) {
               fileRef.current?.click();
-              return;
+            } else {
+              s.set("avatarKind", "model");
             }
-            s.set("avatarKind", kind);
           }}
           options={[
-            { value: "mannequin", label: "기본 캐릭터" },
-            { value: "model", label: "내 모델" },
+            { value: "preset", label: "기본 아바타" },
+            { value: "custom", label: "내 파일" },
+            { value: "mannequin", label: "도형" },
           ]}
         />
+
+        {source === "preset" ? (
+          <div className="space-y-2.5">
+            {(["female", "male"] as Gender[]).map((gender) => (
+              <div key={gender}>
+                <p className="mb-1 text-[11px] text-white/40">
+                  {GENDER_LABEL[gender]}
+                </p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {AVATAR_PRESETS.filter((p) => p.gender === gender).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      title={p.label}
+                      onClick={() => s.patch(selectPreset(p))}
+                      className={`overflow-hidden rounded-lg border transition ${
+                        s.presetId === p.id
+                          ? "border-indigo-400 ring-1 ring-indigo-400/60"
+                          : "border-white/10 hover:border-white/30"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.thumb}
+                        alt={`${GENDER_LABEL[p.gender]} ${p.label}`}
+                        className="aspect-square w-full object-cover"
+                        loading="lazy"
+                      />
+                      <span className="block truncate bg-black/40 px-1 py-0.5 text-[10px] text-white/70">
+                        {p.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {s.avatarKind === "mannequin" ? (
           <>
@@ -194,12 +248,12 @@ export function ControlPanel({ engine }: { engine: Engine }) {
               색상 초기화
             </Button>
           </>
-        ) : (
+        ) : source === "custom" ? (
           <p className="rounded-lg bg-black/25 px-3 py-2 text-[11px] text-white/50">
             현재 아바타: {s.modelName ?? "없음"}
             {s.modelFormat ? ` · ${FORMAT_LABEL[s.modelFormat]}` : ""}
           </p>
-        )}
+        ) : null}
 
         <input
           ref={fileRef}
@@ -212,9 +266,12 @@ export function ControlPanel({ engine }: { engine: Engine }) {
             e.target.value = "";
           }}
         />
-        <Button full onClick={() => fileRef.current?.click()}>
-          모델 파일 올리기 (.vrm .glb .gltf .fbx)…
-        </Button>
+        {source === "custom" ? (
+          <Button full onClick={() => fileRef.current?.click()}>
+            모델 파일 올리기 (.vrm .glb .gltf .fbx)…
+          </Button>
+        ) : null}
+        {source === "custom" ? (
         <div className="flex gap-1.5">
           <input
             value={modelInput}
@@ -229,6 +286,7 @@ export function ControlPanel({ engine }: { engine: Engine }) {
             적용
           </Button>
         </div>
+        ) : null}
       </Panel>
 
       <Panel title="화면">
@@ -301,7 +359,10 @@ export function ControlPanel({ engine }: { engine: Engine }) {
               bg: "transparent",
             });
             // Blob URLs from a local file pick can't cross window boundaries.
-            if (s.avatarKind === "model" && s.modelUrl?.startsWith("http")) {
+            if (s.presetId) {
+              q.set("preset", s.presetId);
+            } else if (s.avatarKind === "model" && s.modelUrl?.startsWith("http")) {
+              // Blob URLs from the file picker cannot cross window boundaries.
               q.set("model", s.modelUrl);
             }
             window.open(`/embed?${q}`, "avatar-embed", "width=720,height=960");
