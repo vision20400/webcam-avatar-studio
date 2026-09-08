@@ -50,6 +50,7 @@ export class AvatarViewer {
   private blinker = new IdleBlinker();
   private face: FaceDrive = structuredClone(NEUTRAL_FACE);
   private smoothedFace = structuredClone(NEUTRAL_FACE);
+  private rawFace = new Map<string, number>();
   private ground: THREE.Mesh;
   private backdrop: THREE.Texture | null = null;
   private background: BackgroundKind = "gradient";
@@ -228,6 +229,11 @@ export class AvatarViewer {
     const frame = this.frame;
     if (!rig || !frame) return;
 
+    if (rig.setRawBlendshapes) {
+      this.applyRawBlendshapes(rig, frame, dt);
+      return;
+    }
+
     this.face = frame.hasFace
       ? driveFromBlendshapes(frame.blendshapes, this.expressionGain)
       : structuredClone(NEUTRAL_FACE);
@@ -252,6 +258,49 @@ export class AvatarViewer {
       }
       rig.setExpression(key, v);
     }
+    rig.setGaze(this.smoothedFace.gaze.yaw, this.smoothedFace.gaze.pitch);
+  }
+
+  /**
+   * Models carrying ARKit blendshapes get MediaPipe's scores one-to-one, which
+   * keeps every shape the artist authored instead of collapsing 52 signals into
+   * a dozen VRM presets.
+   */
+  private applyRawBlendshapes(
+    rig: NonNullable<typeof this.rig>,
+    frame: TrackFrame,
+    dt: number,
+  ) {
+    const a = damp(0.25, dt);
+    const gain = this.expressionGain;
+
+    if (frame.hasFace) {
+      for (const [name, value] of Object.entries(frame.blendshapes)) {
+        const target = Math.min(1, value * gain);
+        this.rawFace.set(name, (this.rawFace.get(name) ?? 0) + (target - (this.rawFace.get(name) ?? 0)) * a);
+      }
+    } else {
+      for (const [name, value] of this.rawFace) {
+        this.rawFace.set(name, value + (0 - value) * a);
+      }
+    }
+
+    const idle = this.idleBlink && !frame.hasFace ? this.blinker.update(dt) : 0;
+    const values: Record<string, number> = {};
+    for (const [name, value] of this.rawFace) values[name] = value;
+    if (idle > 0) {
+      values.eyeBlinkLeft = Math.max(values.eyeBlinkLeft ?? 0, idle);
+      values.eyeBlinkRight = Math.max(values.eyeBlinkRight ?? 0, idle);
+    }
+
+    rig.setRawBlendshapes!(values);
+
+    const drive = frame.hasFace
+      ? driveFromBlendshapes(frame.blendshapes, gain)
+      : NEUTRAL_FACE;
+    this.smoothedFace.gaze.yaw += (drive.gaze.yaw - this.smoothedFace.gaze.yaw) * a;
+    this.smoothedFace.gaze.pitch +=
+      (drive.gaze.pitch - this.smoothedFace.gaze.pitch) * a;
     rig.setGaze(this.smoothedFace.gaze.yaw, this.smoothedFace.gaze.pitch);
   }
 

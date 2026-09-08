@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import type { BackgroundKind, CameraPreset } from "@/lib/scene/viewer";
 import { DEFAULT_MANNEQUIN, type MannequinOptions } from "@/lib/avatar/mannequin";
+import type { ModelFormat } from "@/lib/avatar/format";
 import type { AvatarKind, PoseQuality, TrackMode } from "@/lib/types";
 
 export interface Settings {
@@ -13,8 +14,9 @@ export interface Settings {
   mirror: boolean;
 
   avatarKind: AvatarKind;
-  vrmUrl: string | null;
-  vrmName: string | null;
+  modelUrl: string | null;
+  modelName: string | null;
+  modelFormat: ModelFormat | null;
   mannequin: MannequinOptions;
 
   smoothing: number;
@@ -42,8 +44,9 @@ const initial: Settings = {
   mirror: true,
 
   avatarKind: "mannequin",
-  vrmUrl: null,
-  vrmName: null,
+  modelUrl: null,
+  modelName: null,
+  modelFormat: null,
   mannequin: DEFAULT_MANNEQUIN,
 
   smoothing: 0.45,

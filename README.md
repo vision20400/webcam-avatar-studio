@@ -21,12 +21,43 @@ npm run dev      # http://localhost:3000
 | 전신 트래킹 | 골반·척추·팔다리·발까지 33개 랜드마크 기반으로 리깅 |
 | 얼굴 트래킹 | 468점 페이스 메시로 고개 방향, 52개 블렌드셰이프로 표정·시선 |
 | 손가락 트래킹 | 양손 21점 × 2 → VRM 손가락 본 30개 (선택, 무거움) |
-| 아바타 | 내장 저폴리 캐릭터(색상 변경 가능) 또는 직접 올린 `.vrm` |
+| 아바타 | 내장 저폴리 캐릭터(색상 변경 가능) 또는 직접 올린 `.vrm` · `.glb` · `.gltf` · `.fbx` |
 | 배경 | 다크 / 스튜디오 / 크로마키 / 투명 |
 | 출력 | PNG 스냅샷, webm 녹화, OBS·Zoom 용 투명 배경 `/embed` 페이지 |
 
-VRM 파일은 파일 선택으로 올리거나(브라우저 안에만 존재), URL 로 지정할 수 있습니다.
-VRM 0.x / 1.0 둘 다 동작합니다.
+### 아바타 파일 형식
+
+파일 선택으로 올리거나(브라우저 안에만 존재) URL 로 지정합니다.
+
+| 형식 | 상태 | 비고 |
+| --- | --- | --- |
+| `.vrm` | 권장 | 0.x / 1.0 모두. 본·표정·시선이 파일에 정의돼 있어 가장 정확합니다 |
+| `.glb` `.gltf` | 지원 | 본 이름으로 자동 인식. ARKit 블렌드셰이프가 있으면 표정도 |
+| `.fbx` | 지원 | 위와 같음. Mixamo 캐릭터가 대표적입니다 |
+| `.obj` `.stl` `.3mf` `.dxf` | 불가 | 뼈대가 없는 정적 지오메트리라 리깅할 대상이 없습니다 |
+| `.usdz` `.blend` | 불가 | 웹에서 쓰려면 glb 로 내보내세요 |
+
+**핵심은 확장자가 아니라 휴머노이드 본 매핑입니다.** VRM 은 "이 노드가 왼쪽 위팔"이라는
+정보를 파일에 갖고 있지만 glTF·FBX 는 없어서, 이름 규칙으로 추측합니다
+(`src/lib/avatar/boneMapping.ts`).
+
+```
+Mixamo / Ready Player Me   mixamorig:LeftForeArm, LeftHandThumb1
+Unreal                     lowerarm_l, thumb_01_l, calf_l, spine_01
+VRoid glb                  J_Bip_L_LowerArm, J_Bip_C_Hips
+Blender / Rigify           DEF-forearm.L, thumb.01.L
+VRM 식 이름                 leftLowerArm, leftThumbProximal
+```
+
+함정도 같이 처리합니다 — Mixamo 의 `Arm` 은 위팔, `Leg` 는 종아리이고, Rigify 는 골반
+본이 따로 없어 척추 체인의 첫 본이 골반 역할을 합니다.
+
+불러온 뒤에는 정면(카메라 쪽 `+z`), 키(1.7m), 바닥 높이를 자동으로 맞춥니다. glTF·FBX
+캐릭터는 이 셋 중 무엇도 보장하지 않기 때문입니다. 필수 본을 못 찾으면 무엇이
+빠졌는지 화면에 표시하고 기본 캐릭터로 되돌아갑니다.
+
+표정은 ARKit 블렌드셰이프(`jawOpen`, `eyeBlinkLeft` …)가 있으면 MediaPipe 의 52개
+점수를 1:1 로 그대로 넣고, 없으면 이름으로 찾아낸 몇 개 모프 타깃에 매핑합니다.
 
 ### OBS · Zoom 에 넣기
 
@@ -35,8 +66,10 @@ VRM 0.x / 1.0 둘 다 동작합니다.
 ```
 /embed?mode=full&mirror=1&hands=0&preset=upper&bg=transparent
 /embed?mode=face&preset=face&bg=chroma&chroma=%2300b140
-/embed?...&vrm=https://example.com/my-avatar.vrm
+/embed?...&model=https://example.com/my-avatar.glb
 ```
+
+`model` 은 확장자로 형식을 판별합니다. (예전 이름인 `vrm` 도 계속 동작합니다.)
 
 OBS 는 브라우저 소스에 이 주소를 넣으면 되고, Zoom 은 브라우저 소스를 가상 카메라로
 내보내거나 화면 공유로 씁니다. (브라우저만으로 가상 카메라 장치를 만들 수는 없습니다.)
@@ -45,7 +78,8 @@ OBS 는 브라우저 소스에 이 주소를 넣으면 되고, Zoom 은 브라�
 
 ```
 src/lib/tracking/   MediaPipe 래핑, 1€ 필터, 스켈레톤 오버레이
-src/lib/avatar/     본 정의 · 랜드마크→본 솔버 · 내장 캐릭터 · VRM 로더 · 표정 매핑
+src/lib/avatar/     본 정의 · 랜드마크→본 솔버 · 내장 캐릭터 · VRM/glb/fbx 로더
+                    · 본 이름 자동 매핑 · 표정 매핑
 src/lib/scene/      three.js 뷰어(조명·배경·카메라 프리셋·녹화)
 src/components/     엔진 훅과 UI
 ```
@@ -87,9 +121,11 @@ src/components/     엔진 훅과 UI
 npm run check:rig
 ```
 
-합성 랜드마크를 실제 솔버에 넣어 좌표계·거울 모드·비표준 rest 포즈를 검사합니다.
-"오른팔을 든 사람 → 아바타의 어느 팔이 어느 방향으로 올라가는가" 같은, 눈으로만
-보면 놓치기 쉬운 것들입니다.
+합성 랜드마크를 실제 솔버에 넣어 좌표계·거울 모드·비표준 rest 포즈를 검사하고,
+Mixamo·Unreal·VRoid·Blender 이름 규칙이 전부 매핑되는지, cm 단위로 뒤를 보고 있는
+합성 스켈레톤이 정면·1.7m·바닥 기준으로 정규화되는지 확인합니다. "오른팔을 든 사람 →
+아바타의 어느 팔이 어느 방향으로 올라가는가" 같은, 눈으로만 보면 놓치기 쉬운
+것들입니다.
 
 ## 에셋
 
@@ -115,3 +151,5 @@ bash scripts/fetch-assets.sh
 - 깊이(z)는 단안 추정이라 앞뒤 움직임은 실제보다 얕게 나옵니다.
 - 브라우저에서 가상 카메라 장치를 만들 수는 없어, 화상회의에는 OBS 가상 카메라 등을
   거쳐야 합니다.
+- glTF·FBX 는 본 이름이 위 규칙 중 어느 것과도 다르면 인식하지 못합니다. 그럴 때는
+  Blender 등에서 이름을 바꾸거나 VRM 으로 내보내는 편이 빠릅니다.

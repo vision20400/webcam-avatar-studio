@@ -1,5 +1,5 @@
 export type TrackMode = "full" | "face";
-export type AvatarKind = "mannequin" | "vrm";
+export type AvatarKind = "mannequin" | "model";
 export type PoseQuality = "lite" | "full";
 
 export interface Vec3 {

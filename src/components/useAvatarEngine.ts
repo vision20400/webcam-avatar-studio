@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { detectModelFormat } from "@/lib/avatar/format";
+import { loadHumanoidRig } from "@/lib/avatar/humanoid";
 import { createMannequin } from "@/lib/avatar/mannequin";
 import { loadVRMRig } from "@/lib/avatar/vrm";
 import { AvatarViewer } from "@/lib/scene/viewer";
@@ -111,14 +113,22 @@ export function useAvatarEngine({
     let cancelled = false;
 
     const build = async () => {
-      if (settings.avatarKind === "vrm" && settings.vrmUrl) {
+      if (settings.avatarKind === "model" && settings.modelUrl) {
         setAvatarLoading(true);
         setStatus("아바타 불러오는 중…");
         try {
-          const rig = await loadVRMRig(
-            settings.vrmUrl,
-            settings.vrmName ?? "VRM 아바타",
-          );
+          const label = settings.modelName ?? "내 아바타";
+          const format =
+            settings.modelFormat ?? detectModelFormat(settings.modelUrl);
+          if (!format) {
+            throw new Error(
+              "지원하지 않는 형식입니다. .vrm, .glb, .gltf, .fbx 만 쓸 수 있습니다.",
+            );
+          }
+          const rig =
+            format === "vrm"
+              ? await loadVRMRig(settings.modelUrl, label)
+              : await loadHumanoidRig(settings.modelUrl, label, format);
           if (cancelled) {
             rig.dispose();
             return;
@@ -129,7 +139,7 @@ export function useAvatarEngine({
         } catch (e) {
           if (cancelled) return;
           setError(
-            e instanceof Error ? e.message : "VRM 파일을 불러오지 못했습니다.",
+            e instanceof Error ? e.message : "모델 파일을 불러오지 못했습니다.",
           );
           useSettings.getState().patch({ avatarKind: "mannequin" });
         } finally {
@@ -155,7 +165,13 @@ export function useAvatarEngine({
     return () => {
       cancelled = true;
     };
-  }, [ready, settings.avatarKind, settings.vrmUrl, settings.vrmName]);
+  }, [
+    ready,
+    settings.avatarKind,
+    settings.modelUrl,
+    settings.modelName,
+    settings.modelFormat,
+  ]);
 
   // --- settings -> engine ---------------------------------------------------
   useEffect(() => {

@@ -3,6 +3,11 @@
 import { useRef, useState } from "react";
 
 import { useSettings, presetForMode } from "@/lib/store";
+import {
+  FORMAT_LABEL,
+  MODEL_ACCEPT,
+  detectModelFormat,
+} from "@/lib/avatar/format";
 import { DEFAULT_MANNEQUIN } from "@/lib/avatar/mannequin";
 import type { useAvatarEngine } from "./useAvatarEngine";
 import { Button, ColorField, Panel, Segmented, Slider, Toggle } from "./ui";
@@ -20,16 +25,45 @@ export function ControlPanel({ engine }: { engine: Engine }) {
   const s = useSettings();
   const fileRef = useRef<HTMLInputElement>(null);
   const objectUrl = useRef<string | null>(null);
-  const [vrmInput, setVrmInput] = useState("");
+  const [modelInput, setModelInput] = useState("");
 
-  const applyVrmFile = (file: File) => {
+  const applyModelFile = (file: File) => {
+    // Blob URLs carry no extension, so the format is read off the file name
+    // here and kept in state for the loader to dispatch on.
+    const format = detectModelFormat(file.name);
+    if (!format) {
+      engine.setError(
+        `${file.name} 은(는) 지원하지 않는 형식입니다. .vrm, .glb, .gltf, .fbx 를 사용하세요.`,
+      );
+      return;
+    }
     if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
     const url = URL.createObjectURL(file);
     objectUrl.current = url;
+    engine.setError(null);
     s.patch({
-      avatarKind: "vrm",
-      vrmUrl: url,
-      vrmName: file.name.replace(/\.(vrm|glb)$/i, ""),
+      avatarKind: "model",
+      modelUrl: url,
+      modelName: file.name.replace(/\.[^.]+$/, ""),
+      modelFormat: format,
+    });
+  };
+
+  const applyModelUrl = (raw: string) => {
+    const url = raw.trim();
+    const format = detectModelFormat(url);
+    if (!format) {
+      engine.setError(
+        "주소가 .vrm / .glb / .gltf / .fbx 로 끝나야 형식을 알 수 있습니다.",
+      );
+      return;
+    }
+    engine.setError(null);
+    s.patch({
+      avatarKind: "model",
+      modelUrl: url,
+      modelName: url.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "내 아바타",
+      modelFormat: format,
     });
   };
 
@@ -100,11 +134,14 @@ export function ControlPanel({ engine }: { engine: Engine }) {
         />
       </Panel>
 
-      <Panel title="아바타" hint="VRM 파일을 올리면 제페토·VTuber 캐릭터를 그대로 씁니다.">
+      <Panel
+        title="아바타"
+        hint="VRM 이 가장 정확합니다. glb·gltf·fbx 는 본 이름으로 자동 인식합니다."
+      >
         <Segmented
           value={s.avatarKind}
           onChange={(kind) => {
-            if (kind === "vrm" && !s.vrmUrl) {
+            if (kind === "model" && !s.modelUrl) {
               fileRef.current?.click();
               return;
             }
@@ -112,7 +149,7 @@ export function ControlPanel({ engine }: { engine: Engine }) {
           }}
           options={[
             { value: "mannequin", label: "기본 캐릭터" },
-            { value: "vrm", label: "VRM" },
+            { value: "model", label: "내 모델" },
           ]}
         />
 
@@ -159,40 +196,35 @@ export function ControlPanel({ engine }: { engine: Engine }) {
           </>
         ) : (
           <p className="rounded-lg bg-black/25 px-3 py-2 text-[11px] text-white/50">
-            현재 아바타: {s.vrmName ?? "없음"}
+            현재 아바타: {s.modelName ?? "없음"}
+            {s.modelFormat ? ` · ${FORMAT_LABEL[s.modelFormat]}` : ""}
           </p>
         )}
 
         <input
           ref={fileRef}
           type="file"
-          accept=".vrm,.glb,model/gltf-binary"
+          accept={MODEL_ACCEPT}
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) applyVrmFile(f);
+            if (f) applyModelFile(f);
             e.target.value = "";
           }}
         />
         <Button full onClick={() => fileRef.current?.click()}>
-          VRM 파일 올리기…
+          모델 파일 올리기 (.vrm .glb .gltf .fbx)…
         </Button>
         <div className="flex gap-1.5">
           <input
-            value={vrmInput}
-            onChange={(e) => setVrmInput(e.target.value)}
-            placeholder="또는 VRM 주소 붙여넣기"
+            value={modelInput}
+            onChange={(e) => setModelInput(e.target.value)}
+            placeholder="또는 모델 주소 붙여넣기"
             className="min-w-0 flex-1 rounded-xl bg-black/30 px-3 py-2 text-[12px] text-white/80 outline-none placeholder:text-white/25 focus:ring-1 focus:ring-indigo-400"
           />
           <Button
-            disabled={!vrmInput.trim()}
-            onClick={() =>
-              s.patch({
-                avatarKind: "vrm",
-                vrmUrl: vrmInput.trim(),
-                vrmName: vrmInput.trim().split("/").pop() ?? "VRM",
-              })
-            }
+            disabled={!modelInput.trim()}
+            onClick={() => applyModelUrl(modelInput)}
           >
             적용
           </Button>
@@ -269,8 +301,8 @@ export function ControlPanel({ engine }: { engine: Engine }) {
               bg: "transparent",
             });
             // Blob URLs from a local file pick can't cross window boundaries.
-            if (s.avatarKind === "vrm" && s.vrmUrl?.startsWith("http")) {
-              q.set("vrm", s.vrmUrl);
+            if (s.avatarKind === "model" && s.modelUrl?.startsWith("http")) {
+              q.set("model", s.modelUrl);
             }
             window.open(`/embed?${q}`, "avatar-embed", "width=720,height=960");
           }}

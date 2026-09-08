@@ -86,6 +86,12 @@ export interface AvatarRig {
   setExpression(name: ExpressionName, weight: number): void;
   /** Eye gaze in normalised units, -1..1. */
   setGaze(yaw: number, pitch: number): void;
+  /**
+   * Models exported with ARKit blendshapes can take MediaPipe's 52 scores
+   * directly, which is richer than routing them through the preset set above.
+   * When present, this replaces setExpression.
+   */
+  setRawBlendshapes?(values: Record<string, number>): void;
   /** Recolour in place, where the avatar supports it (built-in mannequin). */
   setPalette?(body: string, accent: string, skin: string): void;
   update(delta: number): void;
